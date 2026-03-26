@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alan's Body Composition Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface2: #f0ede6;
+    --border: #e2ddd5;
+    --text: #1a1916;
+    --muted: #7a7670;
+    --hint: #b0ada6;
+    --accent: #2d5a27;
+    --accent-light: #eaf3e6;
+    --warn: #b84c00;
+    --warn-light: #fef0e6;
+    --blue: #1a4480;
+    --blue-light: #e8eef6;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .header {
+    background: var(--text);
+    color: #fff;
+    padding: 28px 32px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::after {
+    content: 'DEXA';
+    position: absolute;
+    right: -10px;
+    top: -10px;
+    font-size: 100px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: rgba(255,255,255,0.05);
+    letter-spacing: -4px;
+    pointer-events: none;
+  }
+  .header-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.5);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+  }
+  .header-meta {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    font-family: var(--mono);
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0 32px;
+  }
+  .tab {
+    padding: 14px 0;
+    margin-right: 28px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    font-family: var(--sans);
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .page { display: none; padding: 28px 32px; }
+  .page.active { display: block; }
+
+  /* Baseline grid */
+  .baseline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .bcard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .bcard-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .bcard-val { font-size: 20px; font-weight: 500; font-family: var(--mono); }
+  .bcard-sub { font-size: 10px; color: var(--hint); margin-top: 4px; font-family: var(--mono); }
+  .val-warn { color: var(--warn); }
+  .val-ok { color: var(--accent); }
+  .val-blue { color: var(--blue); }
+
+  /* Flags */
+  .flags { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .flag {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .flag-warn { background: var(--warn-light); border-left: 3px solid var(--warn); }
+  .flag-ok { background: var(--accent-light); border-left: 3px solid var(--accent); }
+  .flag-icon { font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+  .flag strong { font-weight: 600; display: block; margin-bottom: 2px; color: var(--text); }
+  .flag span { color: var(--muted); font-size: 12px; }
+
+  /* Log form */
+  .form-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+  .form-title { font-size: 13px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .field input {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 12px;
+    font-size: 14px;
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  .field input:focus { outline: none; border-color: var(--text); background: var(--surface); }
+  .field .hint { font-size: 10px; color: var(--hint); font-family: var(--mono); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--sans);
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--surface2); }
+  .btn-primary { background: var(--text); color: #fff; border-color: var(--text); }
+  .btn-primary:hover { background: #333; }
+
+  /* Log table */
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .log-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-family: var(--mono); color: var(--text); }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table tr:hover td { background: var(--bg); }
+  .delta-pos { color: var(--accent); }
+  .delta-neg { color: var(--warn); }
+  .empty-state { text-align: center; padding: 40px; color: var(--hint); font-size: 13px; font-family: var(--mono); }
+
+  /* Charts */
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  .chart-title { font-size: 12px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 16px; }
+  .chart-wrap { position: relative; width: 100%; height: 200px; }
+
+  /* Progress bars */
+  .goal-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  .goal-row { margin-bottom: 16px; }
+  .goal-row:last-child { margin-bottom: 0; }
+  .goal-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+  .goal-name { font-weight: 500; }
+  .goal-nums { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .progress-track { height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: var(--accent); transition: width 0.4s ease; }
+  .progress-fill.warn { background: var(--warn); }
+
+  .section-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+  .delete-btn { background: none; border: none; color: var(--hint); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .delete-btn:hover { color: var(--warn); }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--text);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--mono);
+    transition: transform 0.25s ease;
+    z-index: 999;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 520px) {
+    .header, .tabs, .page { padding-left: 16px; padding-right: 16px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .baseline-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-label">Body Composition Tracker</div>
+  <h1>Alan Moreno</h1>
+  <div class="header-meta">Baseline scan: 3/25/2026 &nbsp;·&nbsp; BodySpec DEXA</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('overview')">Overview</button>
+  <button class="tab" onclick="switchTab('log')">Weekly Log</button>
+  <button class="tab" onclick="switchTab('charts')">Charts</button>
+  <button class="tab" onclick="switchTab('goals')">Goals</button>
+</div>
+
+<!-- OVERVIEW -->
+<div class="page active" id="tab-overview">
+  <p style="font-size:12px; font-family:var(--mono); color:var(--muted); margin-bottom:16px;">DEXA baseline — 3/25/2026</p>
+  <div class="baseline-grid">
+    <div class="bcard"><div class="bcard-label">Weight</div><div class="bcard-val val-blue">226.5</div><div class="bcard-sub">lbs</div></div>
+    <div class="bcard"><div class="bcard-label">Body Fat %</div><div class="bcard-val val-warn">35.2%</div><div class="bcard-sub">&gt; 80th percentile</div></div>
+    <div class="bcard"><div class="bcard-label">Fat Mass</div><div class="bcard-val val-warn">79.8</div><div class="bcard-sub">lbs to lose</div></div>
+    <div class="bcard"><div class="bcard-label">Lean Mass</div><div class="bcard-val val-ok">139.8</div><div class="bcard-sub">lbs — protect this</div></div>
+    <div class="bcard"><div class="bcard-label">RMR</div><div class="bcard-val">1,724</div><div class="bcard-sub">cal/day at rest</div></div>
+    <div class="bcard"><div class="bcard-label">A/G Ratio</div><div class="bcard-val val-warn">1.45</div><div class="bcard-sub">target &lt; 1.0</div></div>
+    <div class="bcard"><div class="bcard-label">Trunk Fat</div><div class="bcard-val val-warn">42.9%</div><div class="bcard-sub">primary target</div></div>
+    <div class="bcard"><div class="bcard-label">VAT Mass</div><div class="bcard-val val-warn">3.22</div><div class="bcard-sub">lbs visceral fat</div></div>
+  </div>
+
+  <div class="flags">
+    <div class="flag flag-warn">
+      <div class="flag-icon">⚠</div>
+      <div><strong>A/G Ratio 1.45 — above 1.0 threshold</strong><span>Android fat (belly/visceral) is disproportionately high vs gynoid. Primary driver of metabolic risk. Waist circumference is your best weekly proxy for this.</span></div>
+    </div>
+    <div class="flag flag-warn">
+      <div class="flag-icon">⚠</div>
+      <div><strong>Trunk fat 42.9% — highest regional fat</strong><span>48 lbs of fat concentrated in the core. Target region for the next 90 days. Responds well to sustained caloric deficit + resistance training.</span></div>
+    </div>
+    <div class="flag flag-ok">
+      <div class="flag-icon">✓</div>
+      <div><strong>Bone density Z-score: 1.6 — top 7% for age</strong><span>Excellent bone health. Heavy compound lifts will maintain this during fat loss.</span></div>
+    </div>
+    <div class="flag flag-ok">
+      <div class="flag-icon">✓</div>
+      <div><strong>Muscle balance: arms ±0.3 lbs, legs ±1.1 lbs</strong><span>No significant imbalances detected. Clean baseline to build from.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="page" id="tab-log">
+  <div class="form-section">
+    <div class="form-title">📋 Log this week</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Scale weight (lbs)</label>
+        <input type="number" id="f-weight" placeholder="avg of 3 mornings" step="0.1">
+        <span class="hint">weigh same time, 3 days avg</span>
+      </div>
+      <div class="field">
+        <label>Waist circumference (in)</label>
+        <input type="number" id="f-waist" placeholder="at navel" step="0.25">
+        <span class="hint">proxy for android/visceral fat</span>
+      </div>
+      <div class="field">
+        <label>Avg daily calories</label>
+        <input type="number" id="f-cal" placeholder="tracked via app" step="10">
+        <span class="hint">RMR 1,724 · target deficit: 500–750</span>
+      </div>
+      <div class="field">
+        <label>Protein (g/day)</label>
+        <input type="number" id="f-protein" placeholder="target: 140–160g" step="1">
+        <span class="hint">~1g per lb lean mass</span>
+      </div>
+      <div class="field">
+        <label>Strength sessions</label>
+        <input type="number" id="f-strength" placeholder="0–7" min="0" max="7" step="1">
+        <span class="hint">min 2–3/week to preserve muscle</span>
+      </div>
+      <div class="field">
+        <label>Note (optional)</label>
+        <input type="text" id="f-note" placeholder="e.g. started creatine" style="font-family:var(--sans);">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="logEntry()">Save entry</button>
+      <button class="btn" onclick="clearForm()">Clear</button>
+    </div>
+  </div>
+
+  <div class="section-title">Entry history</div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:auto;">
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Week</th>
+          <th>Date</th>
+          <th>Weight</th>
+          <th>Δ</th>
+          <th>Waist</th>
+          <th>Calories</th>
+          <th>Protein</th>
+          <th>Sessions</th>
+          <th>Note</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="log-body">
+        <tr><td colspan="10" class="empty-state">No entries yet — log your first week above.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="page" id="tab-charts">
+  <div class="chart-card">
+    <div class="chart-title">Weight (lbs)</div>
+    <div class="chart-wrap"><canvas id="c-weight"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Waist circumference (in) — android fat proxy</div>
+    <div class="chart-wrap"><canvas id="c-waist"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Daily calories vs protein (g)</div>
+    <div class="chart-wrap"><canvas id="c-nutrition"></canvas></div>
+  </div>
+</div>
+
+<!-- GOALS -->
+<div class="page" id="tab-goals">
+  <div class="goal-section">
+    <div class="section-title">90-day targets</div>
+
+    <div class="goal-row">
+      <div class="goal-label">
+        <span class="goal-name">Weight loss</span>
+        <span class="goal-nums" id="g-weight-txt">226.5 lbs → 185 lbs</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="g-weight-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="goal-row">
+      <div class="goal-label">
+        <span class="goal-name">Body fat % (DEXA est.)</span>
+        <span class="goal-nums">35.2% → &lt;24%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill warn" id="g-bf-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="goal-row">
+      <div class="goal-label">
+        <span class="goal-name">Weekly protein target (140g)</span>
+        <span class="goal-nums" id="g-prot-txt">—</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="g-prot-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="goal-row">
+      <div class="goal-label">
+        <span class="goal-name">Weekly strength sessions (3 min)</span>
+        <span class="goal-nums" id="g-str-txt">—</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="g-str-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="goal-section">
+    <div class="section-title">Science-backed targets</div>
+    <table style="width:100%; font-size:12px; border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; font-weight:500;">Body fat % goal</td>
+        <td style="padding:10px 0; font-family:var(--mono); text-align:right; color:var(--muted);">&lt;20% (top 40th percentile, men 20–29)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; font-weight:500;">Weekly fat loss rate</td>
+        <td style="padding:10px 0; font-family:var(--mono); text-align:right; color:var(--muted);">0.5–1% body weight/week</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; font-weight:500;">Caloric deficit</td>
+        <td style="padding:10px 0; font-family:var(--mono); text-align:right; color:var(--muted);">500–750 cal/day below TDEE</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; font-weight:500;">Protein minimum</td>
+        <td style="padding:10px 0; font-family:var(--mono); text-align:right; color:var(--muted);">140–160g/day (1g per lb lean mass)</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0; font-weight:500;">Next DEXA scan</td>
+        <td style="padding:10px 0; font-family:var(--mono); text-align:right; color:var(--muted);">~90 days (June 2026)</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast">Entry saved ✓</div>
+
+<script>
+const STORAGE_KEY = 'alan_tracker_v1';
+let entries = [];
+let charts = {};
+
+function load() {
+  try { entries = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { entries = []; }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'charts') renderCharts();
+  if (name === 'goals') renderGoals();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function logEntry() {
+  const w = parseFloat(document.getElementById('f-weight').value);
+  if (!w) { alert('Weight is required.'); return; }
+  const entry = {
+    id: Date.now(),
+    date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}),
+    week: 'Week ' + (entries.length + 1),
+    weight: isNaN(w) ? null : Math.round(w * 10) / 10,
+    waist: parseFloat(document.getElementById('f-waist').value) || null,
+    cal: parseFloat(document.getElementById('f-cal').value) || null,
+    protein: parseFloat(document.getElementById('f-protein').value) || null,
+    strength: parseInt(document.getElementById('f-strength').value) || null,
+    note: document.getElementById('f-note').value.trim() || ''
+  };
+  entries.push(entry);
+  save();
+  renderLog();
+  renderGoals();
+  clearForm();
+  showToast('Entry saved ✓');
+}
+
+function deleteEntry(id) {
+  entries = entries.filter(e => e.id !== id);
+  save();
+  renderLog();
+  renderGoals();
+}
+
+function clearForm() {
+  ['f-weight','f-waist','f-cal','f-protein','f-strength','f-note'].forEach(id => document.getElementById(id).value = '');
+}
+
+function delta(i) {
+  if (i === 0) return '—';
+  const prev = i > 0 ? entries[i-1].weight : 226.5;
+  const curr = entries[i].weight;
+  if (!prev || !curr) return '—';
+  const d = (curr - prev).toFixed(1);
+  return d;
+}
+
+function renderLog() {
+  const body = document.getElementById('log-body');
+  if (!entries.length) {
+    body.innerHTML = '<tr><td colspan="10" class="empty-state">No entries yet — log your first week above.</td></tr>';
+    return;
+  }
+  body.innerHTML = [...entries].reverse().map((e, ri) => {
+    const i = entries.length - 1 - ri;
+    const d = delta(i);
+    const dClass = d === '—' ? '' : parseFloat(d) < 0 ? 'delta-pos' : 'delta-neg';
+    const dStr = d === '—' ? '—' : (parseFloat(d) > 0 ? '+' : '') + d;
+    return `<tr>
+      <td>${e.week}</td>
+      <td>${e.date}</td>
+      <td>${e.weight ?? '—'}</td>
+      <td class="${dClass}">${dStr}</td>
+      <td>${e.waist ? e.waist + '"' : '—'}</td>
+      <td>${e.cal ?? '—'}</td>
+      <td>${e.protein ? e.protein + 'g' : '—'}</td>
+      <td>${e.strength ?? '—'}</td>
+      <td style="font-size:11px;color:var(--muted);">${e.note || '—'}</td>
+      <td><button class="delete-btn" onclick="deleteEntry(${e.id})" title="Delete">×</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function makeChart(id, label, color, data, labels) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Baseline', ...labels],
+      datasets: [{
+        label,
+        data,
+        borderColor: color,
+        backgroundColor: color + '18',
+        borderWidth: 2,
+        pointRadius: 5,
+        pointBackgroundColor: color,
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { color: '#7a7670', font: { family: 'DM Mono', size: 11 } }, grid: { color: '#e2ddd5' } },
+        x: { ticks: { color: '#7a7670', font: { family: 'DM Mono', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCharts() {
+  const labels = entries.map(e => e.week);
+  makeChart('c-weight', 'Weight', '#1a4480', [226.5, ...entries.map(e => e.weight)], labels);
+
+  const waistEntries = entries.filter(e => e.waist);
+  makeChart('c-waist', 'Waist', '#b84c00',
+    waistEntries.map(e => e.waist),
+    waistEntries.map(e => e.week));
+
+  const calCtx = document.getElementById('c-nutrition');
+  if (!calCtx) return;
+  if (charts['c-nutrition']) charts['c-nutrition'].destroy();
+  charts['c-nutrition'] = new Chart(calCtx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Calories', data: entries.map(e => e.cal), backgroundColor: '#1a448033', borderColor: '#1a4480', borderWidth: 1.5, yAxisID: 'y' },
+        { label: 'Protein (g)', data: entries.map(e => e.protein), type: 'line', borderColor: '#2d5a27', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { font: { family: 'DM Mono', size: 11 }, color: '#7a7670', boxWidth: 10 } } },
+      scales: {
+        y: { ticks: { color: '#7a7670', font: { family: 'DM Mono', size: 11 } }, grid: { color: '#e2ddd5' }, title: { display: true, text: 'Cal', color: '#7a7670', font: { size: 10 } } },
+        y1: { position: 'right', ticks: { color: '#2d5a27', font: { family: 'DM Mono', size: 11 } }, grid: { display: false }, title: { display: true, text: 'Protein g', color: '#2d5a27', font: { size: 10 } } },
+        x: { ticks: { color: '#7a7670', font: { family: 'DM Mono', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderGoals() {
+  const latest = entries.length ? entries[entries.length - 1] : null;
+  const startW = 226.5, goalW = 185;
+  const currW = latest?.weight ?? startW;
+  const wPct = Math.min(100, Math.max(0, Math.round((startW - currW) / (startW - goalW) * 100)));
+  document.getElementById('g-weight-bar').style.width = wPct + '%';
+  document.getElementById('g-weight-txt').textContent = currW + ' lbs → ' + goalW + ' lbs (' + wPct + '%)';
+
+  const startBF = 35.2, goalBF = 24;
+  const estBF = latest ? Math.max(goalBF, startBF - ((startW - currW) / startW * startBF * 0.7)).toFixed(1) : startBF;
+  const bfPct = Math.min(100, Math.max(0, Math.round((startBF - estBF) / (startBF - goalBF) * 100)));
+  document.getElementById('g-bf-bar').style.width = bfPct + '%';
+
+  if (latest?.protein) {
+    const pp = Math.min(100, Math.round(latest.protein / 140 * 100));
+    document.getElementById('g-prot-bar').style.width = pp + '%';
+    document.getElementById('g-prot-txt').textContent = latest.protein + 'g / 140g target (' + pp + '%)';
+  }
+  if (latest?.strength !== null && latest?.strength !== undefined) {
+    const sp = Math.min(100, Math.round(latest.strength / 3 * 100));
+    document.getElementById('g-str-bar').style.width = sp + '%';
+    document.getElementById('g-str-txt').textContent = latest.strength + ' / 3 sessions (' + sp + '%)';
+  }
+}
+
+load();
+renderLog();
+renderGoals();
+</script>
+</body>
+</html>
